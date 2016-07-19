@@ -46,18 +46,17 @@ import           Data.Monoid                ((<>))
 import           Data.String.Conversions    (cs)
 import           Data.Text                  (Text)
 import qualified Data.Text                  as Text (dropWhileEnd, intercalate)
-import qualified Data.Text.IO as TextIO (putStrLn)
+import qualified Data.Text.IO               as TextIO (putStrLn)
 import           Data.Typeable              (Typeable)
 import           GHC.Generics               (Generic)
+import           JavaScript.Ajax
+import           Network.HTTP.Types         (Status)
 import           Prelude                    hiding (log)
-import Network.HTTP.Types (Status)
-import JavaScript.Ajax
 
 
 
 
 type ApiEff       = ReaderT ApiOptions IO
--- type Status       =
 
 
 -- | Raw API Result, which can include an Error + Message, or the Response Body
@@ -70,9 +69,9 @@ type RawApiResult = Either (Status, ByteString) ByteString
 
 
 data ApiOptions = ApiOptions {
-  apiUrl         :: Text,
-  apiPrefix      :: Text,
-  apiDebug       :: Bool
+  apiUrl    :: Text,
+  apiPrefix :: Text,
+  apiDebug  :: Bool
 } deriving (Show, Generic, Typeable)
 
 
@@ -202,17 +201,17 @@ internalAction
   => StdMethod -- ^ method
   -> Text -- ^ url
   -> body
---  -> (Either (Int, Text) response -> IO [SomeStoreAction])
   -> m RawApiResult
 internalAction method url body = do
 --  jsonAjax method url [] body -- liftIO ((act >>= properResponse) `catch` handler)
-  AjaxResponse{..} <- liftIO $ sendRequest method url Nothing Nothing
-  case ar_status of
-    (Status 200 _) -> pure $ Right $ cs ar_body
-    _   -> pure $ Left (ar_status, "")
+  liftIO (sendRequest method url Nothing Nothing >>= properResponse)
+  -- AjaxResponse{..} <- liftIO $ (sendRequest method url Nothing Nothing >>= properResponse) `catch` handler)
+  -- case ar_status of
+  --   (Status 200 _) -> pure $ Right $ cs ar_body
+  --   _   -> pure $ Left (ar_status, "")
 
   where
---  handler _ = pure $ Left (500, "fixme")
+--  handler SomeException = pure $ Left (500, "fixme")
   -- where
   -- handler (StatusCodeException s headers _) = do
   --    -- This basically makes this library specific to my ln-* project.
@@ -227,12 +226,12 @@ internalAction method url body = do
 
 
 
-properResponse :: (Monad m, FromJSON body) => body -> m (Either (Status, body) body)
-properResponse r = do
-  pure $ Left undefined
-  -- case (r ^. responseStatus ^. statusCode) of
-  --   200 -> pure $ Right (r ^. responseBody)
-  --   _   -> pure $ Left ((r ^. responseStatus), (r ^. responseBody))
+-- properResponse :: (Monad m, FromJSON body) => AjaxResponse -> m (Either (Status, body) body)
+properResponse :: (Monad m) => AjaxResponse -> m RawApiResult
+properResponse AjaxResponse{..} = do
+  case ar_status of
+    (Status 200 _) -> pure $ Right $ cs ar_body
+    _              -> pure $ Left (ar_status, cs ar_body)
 
 
 
