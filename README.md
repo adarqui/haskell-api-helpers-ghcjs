@@ -1,12 +1,12 @@
-# haskell-api-helpers
+# haskell-api-helpers-ghcs
 
-Some api helpers.
+Some api helpers. Modeled after haskell-api-helpers so that I can use the same interface in ghcjs.
 
 
 ## Misc
 
 ```
 :set -XOverloadedStrings
-let opts = ApiOptions "https://localhost" "api" (Just "1") (Just "z-authorization") defaultWreqOptions True
+let opts = ApiOptions "https://localhost" "api" True
 runWith (getAt ([("key","value")] :: [(String,String)]) []) opts
 ```
