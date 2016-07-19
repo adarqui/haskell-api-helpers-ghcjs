@@ -1,9 +1,9 @@
-{-# LANGUAGE DeriveGeneric         #-}
-{-# LANGUAGE ExplicitForAll        #-}
-{-# LANGUAGE FlexibleContexts      #-}
-{-# LANGUAGE FlexibleInstances     #-}
-{-# LANGUAGE OverloadedStrings     #-}
-{-# LANGUAGE RecordWildCards       #-}
+{-# LANGUAGE DeriveGeneric     #-}
+{-# LANGUAGE ExplicitForAll    #-}
+{-# LANGUAGE FlexibleContexts  #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards   #-}
 
 module Haskell.Api.Helpers.GHCJS (
   ApiOptions (..),
@@ -33,7 +33,8 @@ module Haskell.Api.Helpers.GHCJS (
 
 import           Control.Monad.IO.Class     (MonadIO, liftIO)
 import           Control.Monad.Trans.Reader (ReaderT, ask, asks, runReaderT)
-import           Data.Aeson                 (FromJSON, ToJSON, eitherDecode)
+import           Data.Aeson                 (FromJSON, ToJSON, eitherDecode,
+                                             encode)
 import           Data.Default               (Default, def)
 import           Data.Monoid                ((<>))
 import           Data.String.Conversions    (cs)
@@ -177,32 +178,13 @@ handleError (Right bs)    =
 
 
 internalAction
-  :: (MonadIO m)
-  => StdMethod -- ^ method
-  -> Text -- ^ url
-  -> body
-  -> m RawApiResult
-internalAction method url body =
---  jsonAjax method url [] body -- liftIO ((act >>= properResponse) `catch` handler)
-  liftIO (sendRequest method url Nothing Nothing >>= properResponse)
-  -- AjaxResponse{..} <- liftIO $ (sendRequest method url Nothing Nothing >>= properResponse) `catch` handler)
-  -- case ar_status of
-  --   (Status 200 _) -> pure $ Right $ cs ar_body
-  --   _   -> pure $ Left (ar_status, "")
-
-  where
---  handler SomeException = pure $ Left (500, "fixme")
-  -- where
-  -- handler (StatusCodeException s headers _) = do
-  --    -- This basically makes this library specific to my ln-* project.
-  --    -- It looks for the X-jSON-ERROR header, and if it is set, returns
-  --    -- that message. This message may then be a JSON string, which can give us
-  --    -- more detailed error information.
-  --    --
-  --    case find ((==) "X-jSON-ERROR" . fst) headers of
-  --      Nothing        -> pure $ Left (s, cs $ statusMessage s)
-  --      Just (_, body) -> pure $ Left (s, cs body)
-  -- handler _                                 = pure $ Left (status500, "wreq")
+  :: (MonadIO m, ToJSON body)
+  => StdMethod      -- ^ method
+  -> Text           -- ^ url
+  -> Maybe body     -- ^ optional request body to encode
+  -> m RawApiResult -- ^ result
+internalAction method url m_body =
+  liftIO (sendRequest method url (fmap (cs . encode) m_body) (Just "application/json") >>= properResponse)
 
 
 
@@ -222,29 +204,29 @@ getAt params' paths = do
 
   let url' = routeQueryBy url paths params'
   runDebug (log ("getAt: " <> url'))
-  internalAction GET url' ()
+  internalAction GET url' (Nothing :: Maybe ())
 
 
 
-postAt :: (QueryParam qp, ToJSON a) => [qp] -> [Text] -> a -> ApiEff RawApiResult
+postAt :: (QueryParam qp, ToJSON body) => [qp] -> [Text] -> body -> ApiEff RawApiResult
 postAt params' paths body = do
 
   url <- urlFromReader
 
   let url' = routeQueryBy url paths params'
   runDebug (log ("postAt: " <> url'))
-  internalAction POST url' body
+  internalAction POST url' (Just body)
 
 
 
-putAt :: (QueryParam qp, ToJSON a) => [qp] -> [Text] -> a -> ApiEff RawApiResult
+putAt :: (QueryParam qp, ToJSON body) => [qp] -> [Text] -> body -> ApiEff RawApiResult
 putAt params' paths body = do
 
   url <- urlFromReader
 
   let url' = routeQueryBy url paths params'
   runDebug (log ("putAt: " <> url'))
-  internalAction PUT url' body
+  internalAction PUT url' (Just body)
 
 
 
@@ -255,7 +237,7 @@ deleteAt params' paths = do
 
   let url' = routeQueryBy url paths params'
   runDebug (log ("deleteAt: " <> url'))
-  internalAction DELETE url' ()
+  internalAction DELETE url' (Nothing :: Maybe ())
 
 
 
