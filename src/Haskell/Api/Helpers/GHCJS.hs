@@ -64,7 +64,7 @@ type ApiEff       = ReaderT ApiOptions IO
 -- However, we are potentially pulling the response body from the content of the header: X-jSON-ERROR.
 -- This is because we don't have access to the body of the message in an exception.
 --
-type RawApiResult = Either (Status, ByteString) ByteString
+type RawApiResult = Either (Status, Text) Text
 
 
 
@@ -179,18 +179,18 @@ fixOpts params' = undefined
 
 
 
-_eitherDecode :: (FromJSON a, Default a) => ByteString -> a
-_eitherDecode bs =
-  case eitherDecode bs of
+_eitherDecode :: (FromJSON a, Default a) => Text -> a
+_eitherDecode text =
+  case eitherDecode $ cs text of
     Left _  -> def
     Right v -> v
 
 
 
-handleError :: (FromJSON a, FromJSON b, Default b) => Either (Status, ByteString) ByteString -> Either (ApiError b) a
+handleError :: (FromJSON a, FromJSON b, Default b) => RawApiResult -> Either (ApiError b) a
 handleError (Left (status, body)) = Left $ ServerError status (_eitherDecode body)
 handleError (Right bs)    =
-  case eitherDecode bs of
+  case eitherDecode (cs bs) of
     Left err -> Left $ DecodeError $ cs err
     Right a  -> Right a
 
