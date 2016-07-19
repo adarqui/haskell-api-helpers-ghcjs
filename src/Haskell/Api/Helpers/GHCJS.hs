@@ -226,7 +226,7 @@ internalAction method url body = do
 
 
 
--- properResponse :: (Monad m, FromJSON body) => AjaxResponse -> m (Either (Status, body) body)
+-- properResponse :: (Monad m, FromJSON body) => AjaxResponse -> m RawApiResult
 properResponse :: (Monad m) => AjaxResponse -> m RawApiResult
 properResponse AjaxResponse{..} = do
   case ar_status of
