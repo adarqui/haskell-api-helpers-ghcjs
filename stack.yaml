@@ -1,5 +1,6 @@
 flags: {}
 packages:
 - '.'
+- '../ghcjs-ajax/ghcjs-ajax'
 extra-deps: []
-resolver: lts-6.4
+resolver: lts-6.7

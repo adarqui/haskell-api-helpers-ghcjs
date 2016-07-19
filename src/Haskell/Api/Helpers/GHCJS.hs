@@ -7,20 +7,17 @@
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE RecordWildCards       #-}
 
-module Haskell.Api.Helpers (
+module Haskell.Api.Helpers.GHCJS (
   ApiOptions (..),
   ApiError (..),
   ApiEff,
   RawApiResult,
   QueryParam (..),
   defaultApiOptions,
-  settings,
-  defaultWreqOptions,
   route,
   flattenParams,
   mkQueryString,
   routeQueryBy,
-  routeQueryBy',
   runDebug,
   urlFromReader,
   handleError,
@@ -31,15 +28,12 @@ module Haskell.Api.Helpers (
   runDefault,
   rD,
   runWith,
-  rW,
-  runWithAuthId,
-  rWA
+  rW
 ) where
 
 
 
 import           Control.Exception          (catch)
-import           Control.Lens               ((&), (.~), (^.))
 import           Control.Monad.IO.Class     (MonadIO, liftIO)
 import           Control.Monad.Trans.Reader (ReaderT, ask, asks, runReaderT)
 import           Data.Aeson                 (FromJSON, ToJSON, eitherDecode,
@@ -52,26 +46,18 @@ import           Data.Monoid                ((<>))
 import           Data.String.Conversions    (cs)
 import           Data.Text                  (Text)
 import qualified Data.Text                  as Text (dropWhileEnd, intercalate)
+import qualified Data.Text.IO as TextIO (putStrLn)
 import           Data.Typeable              (Typeable)
 import           GHC.Generics               (Generic)
-import qualified Network.Connection         as Network (TLSSettings (..))
-import           Network.HTTP.Client        (HttpException (..))
-import qualified Network.HTTP.Conduit       as Conduit (ManagerSettings,
-                                                        mkManagerSettings)
-import           Network.HTTP.Types.Header  (HeaderName)
-import           Network.HTTP.Types.Status  (status500, statusMessage)
-import           Network.Wreq               (Options, Response, Status,
-                                             defaults, deleteWith, getWith,
-                                             header, param, postWith, putWith,
-                                             responseBody, responseStatus,
-                                             statusCode)
-import qualified Network.Wreq.Types         as WreqTypes (Options (..), manager)
 import           Prelude                    hiding (log)
+import Network.HTTP.Types (Status)
+import JavaScript.Ajax
 
 
 
 
 type ApiEff       = ReaderT ApiOptions IO
+-- type Status       =
 
 
 -- | Raw API Result, which can include an Error + Message, or the Response Body
@@ -86,9 +72,6 @@ type RawApiResult = Either (Status, ByteString) ByteString
 data ApiOptions = ApiOptions {
   apiUrl         :: Text,
   apiPrefix      :: Text,
-  apiKey         :: Maybe BSC.ByteString,
-  apiKeyHeader   :: Maybe HeaderName,
-  apiWreqOptions :: Options,
   apiDebug       :: Bool
 } deriving (Show, Generic, Typeable)
 
@@ -133,11 +116,6 @@ routeQueryBy url paths params' = route url paths <> mkQueryString (flattenParams
 
 
 
-routeQueryBy' :: QueryParam qp => Text -> [Text] -> [qp] -> String
-routeQueryBy' url paths params' = cs $ routeQueryBy url paths params'
-
-
-
 runDebug :: ApiEff () -> ApiEff ()
 runDebug fn = do
   debug <- asks apiDebug
@@ -159,25 +137,10 @@ urlFromReader = do
 
 
 
-settings :: Conduit.ManagerSettings
-settings = Conduit.mkManagerSettings (Network.TLSSettingsSimple True False False) Nothing
-
-
-
-defaultWreqOptions :: WreqTypes.Options
-defaultWreqOptions = defaults {
-  WreqTypes.manager = Left settings -- Left tlsManagerSettings
-}
-
-
-
 defaultApiOptions :: ApiOptions
 defaultApiOptions = ApiOptions {
   apiUrl         = "https://github.com",
   apiPrefix      = "api",
-  apiKey         = Nothing,
-  apiKeyHeader   = Nothing,
-  apiWreqOptions = defaultWreqOptions,
   apiDebug       = True
 }
 
@@ -203,31 +166,17 @@ rW = runWith
 
 
 
-runWithAuthId :: ReaderT ApiOptions m a -> Text -> m a
-runWithAuthId actions string_id = runWith actions (defaultApiOptions { apiKey = Just $ cs string_id })
+-- fixOpts :: [(Text, Text)] -> ApiEff Options
+fixOpts params' = undefined
 
+  -- let
+  --   opts = case (mapi_key, mapi_key_header) of
+  --     (Just api_key, Just api_key_header) -> options' & header api_key_header .~ [api_key]
+  --     _                                   -> options'
 
+  --   opts_with_params = Prelude.foldl (\acc (k, v) -> acc & param k .~ [v]) opts params'
 
-rWA :: ReaderT ApiOptions m a -> Text -> m a
-rWA = runWithAuthId
-
-
-
-fixOpts :: [(Text, Text)] -> ApiEff Options
-fixOpts params' = do
-
-  mapi_key <- asks apiKey
-  mapi_key_header <- asks apiKeyHeader
-  options'  <- asks apiWreqOptions
-
-  let
-    opts = case (mapi_key, mapi_key_header) of
-      (Just api_key, Just api_key_header) -> options' & header api_key_header .~ [api_key]
-      _                                   -> options'
-
-    opts_with_params = Prelude.foldl (\acc (k, v) -> acc & param k .~ [v]) opts params'
-
-  pure $ opts_with_params
+  -- pure $ opts_with_params
 
 
 
@@ -249,30 +198,41 @@ handleError (Right bs)    =
 
 
 internalAction
-  :: forall (m :: * -> *).
-     (MonadIO m)
-  => IO (Response ByteString)
-  -> m (Either (Status, ByteString) ByteString)
-internalAction act = liftIO ((act >>= properResponse) `catch` handler)
+  :: (MonadIO m)
+  => StdMethod -- ^ method
+  -> Text -- ^ url
+  -> body
+--  -> (Either (Int, Text) response -> IO [SomeStoreAction])
+  -> m RawApiResult
+internalAction method url body = do
+--  jsonAjax method url [] body -- liftIO ((act >>= properResponse) `catch` handler)
+  AjaxResponse{..} <- liftIO $ sendRequest method url Nothing Nothing
+  case ar_status of
+    (Status 200 _) -> pure $ Right $ cs ar_body
+    _   -> pure $ Left (ar_status, "")
+
   where
-  handler (StatusCodeException s headers _) = do
-     -- This basically makes this library specific to my ln-* project.
-     -- It looks for the X-jSON-ERROR header, and if it is set, returns
-     -- that message. This message may then be a JSON string, which can give us
-     -- more detailed error information.
-     --
-     case find ((==) "X-jSON-ERROR" . fst) headers of
-       Nothing        -> pure $ Left (s, cs $ statusMessage s)
-       Just (_, body) -> pure $ Left (s, cs body)
-  handler _                                 = pure $ Left (status500, "wreq")
+--  handler _ = pure $ Left (500, "fixme")
+  -- where
+  -- handler (StatusCodeException s headers _) = do
+  --    -- This basically makes this library specific to my ln-* project.
+  --    -- It looks for the X-jSON-ERROR header, and if it is set, returns
+  --    -- that message. This message may then be a JSON string, which can give us
+  --    -- more detailed error information.
+  --    --
+  --    case find ((==) "X-jSON-ERROR" . fst) headers of
+  --      Nothing        -> pure $ Left (s, cs $ statusMessage s)
+  --      Just (_, body) -> pure $ Left (s, cs body)
+  -- handler _                                 = pure $ Left (status500, "wreq")
 
 
 
-properResponse :: Monad m => Response body -> m (Either (Status, body) body)
+properResponse :: (Monad m, FromJSON body) => body -> m (Either (Status, body) body)
 properResponse r = do
-  case (r ^. responseStatus ^. statusCode) of
-    200 -> pure $ Right (r ^. responseBody)
-    _   -> pure $ Left ((r ^. responseStatus), (r ^. responseBody))
+  pure $ Left undefined
+  -- case (r ^. responseStatus ^. statusCode) of
+  --   200 -> pure $ Right (r ^. responseBody)
+  --   _   -> pure $ Left ((r ^. responseStatus), (r ^. responseBody))
 
 
 
@@ -282,9 +242,9 @@ getAt params' paths = do
   opts <- fixOpts $ map qp params'
   url <- urlFromReader
 
-  let url' = routeQueryBy' url paths params'
+  let url' = routeQueryBy url paths params'
   runDebug (log ("getAt: " <> url'))
-  internalAction $ getWith opts url'
+  internalAction GET url' ()
 
 
 
@@ -294,9 +254,9 @@ postAt params' paths body = do
   opts <- fixOpts $ map qp params'
   url <- urlFromReader
 
-  let url' = routeQueryBy' url paths params'
+  let url' = routeQueryBy url paths params'
   runDebug (log ("postAt: " <> url'))
-  internalAction $ postWith opts url' (toJSON body)
+  internalAction POST url' body
 
 
 
@@ -306,9 +266,9 @@ putAt params' paths body = do
   opts <- fixOpts $ map qp params'
   url <- urlFromReader
 
-  let url' = routeQueryBy' url paths params'
+  let url' = routeQueryBy url paths params'
   runDebug (log ("putAt: " <> url'))
-  internalAction $ putWith opts url' (toJSON body)
+  internalAction PUT url' body
 
 
 
@@ -318,11 +278,11 @@ deleteAt params' paths = do
   opts <- fixOpts $ map qp params'
   url <- urlFromReader
 
-  let url' = routeQueryBy' url paths params'
+  let url' = routeQueryBy url paths params'
   runDebug (log ("deleteAt: " <> url'))
-  internalAction $ deleteWith opts url'
+  internalAction DELETE url' ()
 
 
 
-log :: MonadIO m => String -> m ()
-log s = liftIO $ putStrLn s
+log :: MonadIO m => Text -> m ()
+log s = liftIO $ TextIO.putStrLn s
