@@ -2,8 +2,6 @@
 {-# LANGUAGE ExplicitForAll        #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
-{-# LANGUAGE KindSignatures        #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE RecordWildCards       #-}
 
@@ -33,15 +31,10 @@ module Haskell.Api.Helpers.GHCJS (
 
 
 
-import           Control.Exception          (catch)
 import           Control.Monad.IO.Class     (MonadIO, liftIO)
 import           Control.Monad.Trans.Reader (ReaderT, ask, asks, runReaderT)
-import           Data.Aeson                 (FromJSON, ToJSON, eitherDecode,
-                                             toJSON)
-import qualified Data.ByteString.Char8      as BSC (ByteString)
-import           Data.ByteString.Lazy.Char8 (ByteString)
-import           Data.Default
-import           Data.List                  (find)
+import           Data.Aeson                 (FromJSON, ToJSON, eitherDecode)
+import           Data.Default               (Default, def)
 import           Data.Monoid                ((<>))
 import           Data.String.Conversions    (cs)
 import           Data.Text                  (Text)
@@ -49,8 +42,9 @@ import qualified Data.Text                  as Text (dropWhileEnd, intercalate)
 import qualified Data.Text.IO               as TextIO (putStrLn)
 import           Data.Typeable              (Typeable)
 import           GHC.Generics               (Generic)
-import           JavaScript.Ajax
-import           Network.HTTP.Types         (Status)
+import           JavaScript.Ajax            (AjaxResponse (..), StdMethod (..),
+                                             sendRequest)
+import           Network.HTTP.Types         (Status (..))
 import           Prelude                    hiding (log)
 
 
@@ -156,26 +150,12 @@ rD = runDefault
 
 
 runWith :: ReaderT ApiOptions m a -> ApiOptions -> m a
-runWith actions state = runReaderT actions state
+runWith = runReaderT
 
 
 
 rW :: ReaderT ApiOptions m a -> ApiOptions -> m a
 rW = runWith
-
-
-
--- fixOpts :: [(Text, Text)] -> ApiEff Options
-fixOpts params' = undefined
-
-  -- let
-  --   opts = case (mapi_key, mapi_key_header) of
-  --     (Just api_key, Just api_key_header) -> options' & header api_key_header .~ [api_key]
-  --     _                                   -> options'
-
-  --   opts_with_params = Prelude.foldl (\acc (k, v) -> acc & param k .~ [v]) opts params'
-
-  -- pure $ opts_with_params
 
 
 
@@ -202,7 +182,7 @@ internalAction
   -> Text -- ^ url
   -> body
   -> m RawApiResult
-internalAction method url body = do
+internalAction method url body =
 --  jsonAjax method url [] body -- liftIO ((act >>= properResponse) `catch` handler)
   liftIO (sendRequest method url Nothing Nothing >>= properResponse)
   -- AjaxResponse{..} <- liftIO $ (sendRequest method url Nothing Nothing >>= properResponse) `catch` handler)
@@ -228,7 +208,7 @@ internalAction method url body = do
 
 -- properResponse :: (Monad m, FromJSON body) => AjaxResponse -> m RawApiResult
 properResponse :: (Monad m) => AjaxResponse -> m RawApiResult
-properResponse AjaxResponse{..} = do
+properResponse AjaxResponse{..} =
   case ar_status of
     (Status 200 _) -> pure $ Right $ cs ar_body
     _              -> pure $ Left (ar_status, cs ar_body)
@@ -238,7 +218,6 @@ properResponse AjaxResponse{..} = do
 getAt :: (QueryParam qp)  => [qp] -> [Text] -> ApiEff RawApiResult
 getAt params' paths = do
 
-  opts <- fixOpts $ map qp params'
   url <- urlFromReader
 
   let url' = routeQueryBy url paths params'
@@ -250,7 +229,6 @@ getAt params' paths = do
 postAt :: (QueryParam qp, ToJSON a) => [qp] -> [Text] -> a -> ApiEff RawApiResult
 postAt params' paths body = do
 
-  opts <- fixOpts $ map qp params'
   url <- urlFromReader
 
   let url' = routeQueryBy url paths params'
@@ -262,7 +240,6 @@ postAt params' paths body = do
 putAt :: (QueryParam qp, ToJSON a) => [qp] -> [Text] -> a -> ApiEff RawApiResult
 putAt params' paths body = do
 
-  opts <- fixOpts $ map qp params'
   url <- urlFromReader
 
   let url' = routeQueryBy url paths params'
@@ -274,7 +251,6 @@ putAt params' paths body = do
 deleteAt :: QueryParam qp => [qp] -> [Text] -> ApiEff RawApiResult
 deleteAt params' paths = do
 
-  opts <- fixOpts $ map qp params'
   url <- urlFromReader
 
   let url' = routeQueryBy url paths params'
