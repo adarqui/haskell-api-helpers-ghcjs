@@ -15,7 +15,7 @@ cabal-version:       >=1.10
 
 library
   hs-source-dirs:      src
-  exposed-modules:     Haskell.Api.Helpers.GHCJS
+  exposed-modules:     Haskell.Api.Helpers
   build-depends:       base
                      , aeson
                      , bytestring

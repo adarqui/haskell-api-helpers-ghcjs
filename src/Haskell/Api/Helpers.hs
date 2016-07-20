@@ -4,7 +4,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
 
-module Haskell.Api.Helpers.GHCJS (
+module Haskell.Api.Helpers (
   handleError,
   getAt,
   postAt,
@@ -29,10 +29,10 @@ import           Network.HTTP.Types         (Status (..))
 
 
 
-data UselessOptions = UselessOptions
+data SpecificApiOptions = SpecificApiOptions
 
-instance Default UselessOptions where
-  def = UselessOptions
+instance Default SpecificApiOptions where
+  def = SpecificApiOptions
 
 
 
@@ -73,7 +73,7 @@ properResponse AjaxResponse{..} =
 
 
 
-getAt :: (QueryParam qp)  => [qp] -> [Text] -> ApiEff UselessOptions RawApiResult
+getAt :: (QueryParam qp)  => [qp] -> [Text] -> ApiEff SpecificApiOptions RawApiResult
 getAt params' paths = do
 
   url <- urlFromReader
@@ -84,7 +84,7 @@ getAt params' paths = do
 
 
 
-postAt :: (QueryParam qp, ToJSON body) => [qp] -> [Text] -> body -> ApiEff UselessOptions RawApiResult
+postAt :: (QueryParam qp, ToJSON body) => [qp] -> [Text] -> body -> ApiEff SpecificApiOptions RawApiResult
 postAt params' paths body = do
 
   url <- urlFromReader
@@ -95,7 +95,7 @@ postAt params' paths body = do
 
 
 
-putAt :: (QueryParam qp, ToJSON body) => [qp] -> [Text] -> body -> ApiEff UselessOptions RawApiResult
+putAt :: (QueryParam qp, ToJSON body) => [qp] -> [Text] -> body -> ApiEff SpecificApiOptions RawApiResult
 putAt params' paths body = do
 
   url <- urlFromReader
@@ -106,7 +106,7 @@ putAt params' paths body = do
 
 
 
-deleteAt :: QueryParam qp => [qp] -> [Text] -> ApiEff UselessOptions RawApiResult
+deleteAt :: QueryParam qp => [qp] -> [Text] -> ApiEff SpecificApiOptions RawApiResult
 deleteAt params' paths = do
 
   url <- urlFromReader
