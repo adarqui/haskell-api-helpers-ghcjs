@@ -26,7 +26,6 @@ library
                      , string-conversions
                      , text
                      , transformers
-                     , ghcjs-ajax
   ghc-options:         -Wall -Werror
   default-language:    Haskell2010
 
