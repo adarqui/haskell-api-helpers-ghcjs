@@ -1,4 +1,3 @@
-{-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE ExplicitForAll    #-}
 {-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -6,163 +5,40 @@
 {-# LANGUAGE RecordWildCards   #-}
 
 module Haskell.Api.Helpers.GHCJS (
-  ApiOptions (..),
-  ApiError (..),
-  ApiEff,
-  RawApiResult,
-  QueryParam (..),
-  defaultApiOptions,
-  route,
-  flattenParams,
-  mkQueryString,
-  routeQueryBy,
-  runDebug,
-  urlFromReader,
   handleError,
   getAt,
   postAt,
   putAt,
-  deleteAt,
-  runDefault,
-  rD,
-  runWith,
-  rW
+  deleteAt
 ) where
 
 
 
 import           Control.Monad.IO.Class     (MonadIO, liftIO)
-import           Control.Monad.Trans.Reader (ReaderT, ask, asks, runReaderT)
 import           Data.Aeson                 (FromJSON, ToJSON, eitherDecode,
                                              encode)
+import           Data.ByteString.Lazy.Char8 (ByteString)
 import           Data.Default               (Default, def)
 import           Data.Monoid                ((<>))
 import           Data.String.Conversions    (cs)
 import           Data.Text                  (Text)
-import qualified Data.Text                  as Text (dropWhileEnd, intercalate)
-import qualified Data.Text.IO               as TextIO (putStrLn)
-import           Data.Typeable              (Typeable)
-import           GHC.Generics               (Generic)
+import           Haskell.Api.Helpers.Shared
 import           JavaScript.Ajax            (AjaxResponse (..), StdMethod (..),
                                              sendRequest)
 import           Network.HTTP.Types         (Status (..))
-import           Prelude                    hiding (log)
 
 
 
+data UselessOptions = UselessOptions
 
-type ApiEff       = ReaderT ApiOptions IO
-
-
--- | Raw API Result, which can include an Error + Message, or the Response Body
--- (Status, ByteString) is redundant because Status contains a statusMessage (ByteString).
--- However, we are potentially pulling the response body from the content of the header: X-jSON-ERROR.
--- This is because we don't have access to the body of the message in an exception.
---
-type RawApiResult = Either (Status, Text) Text
+instance Default UselessOptions where
+  def = UselessOptions
 
 
 
-data ApiOptions = ApiOptions {
-  apiUrl    :: Text,
-  apiPrefix :: Text,
-  apiDebug  :: Bool
-} deriving (Show, Generic, Typeable)
-
-
-
-data ApiError b
-  = ServerError Status b
-  | DecodeError Text
-  deriving (Show)
-
-
-
-class QueryParam a where
-  qp :: a -> (Text, Text)
-
-
-
-instance QueryParam (Text, Text) where
-  qp (t,t') = (t, t')
-
-
-
-route :: Text -> [Text] -> Text
-route url paths = Text.intercalate "/" (url : paths)
-
-
-
-flattenParams :: QueryParam qp => [qp] -> [Text]
-flattenParams [] = []
-flattenParams params' = map (\par -> let (k,v) = qp par in k <> "=" <> v) params'
-
-
-
-mkQueryString :: [Text] -> Text
-mkQueryString [] = ""
-mkQueryString params' = "?" <> Text.intercalate "&" params'
-
-
-
-routeQueryBy :: QueryParam qp => Text -> [Text] -> [qp] -> Text
-routeQueryBy url paths params' = route url paths <> mkQueryString (flattenParams params')
-
-
-
-runDebug :: ApiEff () -> ApiEff ()
-runDebug fn = do
-  debug <- asks apiDebug
-  if debug
-     then do
-       fn
-       pure ()
-     else pure ()
-
-
-
-urlFromReader :: ApiEff Text
-urlFromReader = do
-  ApiOptions{..} <- ask
-  let
-    apiUrl'    = Text.dropWhileEnd (=='/') apiUrl
-    apiPrefix' = Text.dropWhileEnd (=='/') apiPrefix
-  pure $ apiUrl' <> "/" <> apiPrefix'
-
-
-
-defaultApiOptions :: ApiOptions
-defaultApiOptions = ApiOptions {
-  apiUrl         = "https://github.com",
-  apiPrefix      = "api",
-  apiDebug       = True
-}
-
-
-
-runDefault :: ReaderT ApiOptions m a -> m a
-runDefault actions = runReaderT actions defaultApiOptions
-
-
-
-rD :: ReaderT ApiOptions m a -> m a
-rD = runDefault
-
-
-
-runWith :: ReaderT ApiOptions m a -> ApiOptions -> m a
-runWith = runReaderT
-
-
-
-rW :: ReaderT ApiOptions m a -> ApiOptions -> m a
-rW = runWith
-
-
-
-_eitherDecode :: (FromJSON a, Default a) => Text -> a
-_eitherDecode text =
-  case eitherDecode $ cs text of
+_eitherDecode :: (FromJSON a, Default a) => ByteString -> a
+_eitherDecode bs =
+  case eitherDecode bs of
     Left _  -> def
     Right v -> v
 
@@ -197,49 +73,44 @@ properResponse AjaxResponse{..} =
 
 
 
-getAt :: (QueryParam qp)  => [qp] -> [Text] -> ApiEff RawApiResult
+getAt :: (QueryParam qp)  => [qp] -> [Text] -> ApiEff UselessOptions RawApiResult
 getAt params' paths = do
 
   url <- urlFromReader
 
   let url' = routeQueryBy url paths params'
-  runDebug (log ("getAt: " <> url'))
+  runDebug (apiLog ("getAt: " <> url'))
   internalAction GET url' (Nothing :: Maybe ())
 
 
 
-postAt :: (QueryParam qp, ToJSON body) => [qp] -> [Text] -> body -> ApiEff RawApiResult
+postAt :: (QueryParam qp, ToJSON body) => [qp] -> [Text] -> body -> ApiEff UselessOptions RawApiResult
 postAt params' paths body = do
 
   url <- urlFromReader
 
   let url' = routeQueryBy url paths params'
-  runDebug (log ("postAt: " <> url'))
+  runDebug (apiLog ("postAt: " <> url'))
   internalAction POST url' (Just body)
 
 
 
-putAt :: (QueryParam qp, ToJSON body) => [qp] -> [Text] -> body -> ApiEff RawApiResult
+putAt :: (QueryParam qp, ToJSON body) => [qp] -> [Text] -> body -> ApiEff UselessOptions RawApiResult
 putAt params' paths body = do
 
   url <- urlFromReader
 
   let url' = routeQueryBy url paths params'
-  runDebug (log ("putAt: " <> url'))
+  runDebug (apiLog ("putAt: " <> url'))
   internalAction PUT url' (Just body)
 
 
 
-deleteAt :: QueryParam qp => [qp] -> [Text] -> ApiEff RawApiResult
+deleteAt :: QueryParam qp => [qp] -> [Text] -> ApiEff UselessOptions RawApiResult
 deleteAt params' paths = do
 
   url <- urlFromReader
 
   let url' = routeQueryBy url paths params'
-  runDebug (log ("deleteAt: " <> url'))
+  runDebug (apiLog ("deleteAt: " <> url'))
   internalAction DELETE url' (Nothing :: Maybe ())
-
-
-
-log :: MonadIO m => Text -> m ()
-log s = liftIO $ TextIO.putStrLn s
