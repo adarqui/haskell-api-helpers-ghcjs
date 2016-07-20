@@ -26,6 +26,7 @@ library
                      , string-conversions
                      , text
                      , transformers
+                     , haskell-api-helpers-shared
   ghc-options:         -Wall -Werror
   default-language:    Haskell2010
 

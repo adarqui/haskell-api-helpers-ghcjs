@@ -5,6 +5,8 @@
 {-# LANGUAGE RecordWildCards   #-}
 
 module Haskell.Api.Helpers (
+  SpecificApiOptions (..),
+  defaultSpecificApiOptions,
   handleError,
   getAt,
   postAt,
@@ -32,7 +34,10 @@ import           Network.HTTP.Types         (Status (..))
 data SpecificApiOptions = SpecificApiOptions
 
 instance Default SpecificApiOptions where
-  def = SpecificApiOptions
+  def = defaultSpecificApiOptions
+
+defaultSpecificApiOptions :: SpecificApiOptions
+defaultSpecificApiOptions = SpecificApiOptions
 
 
 
