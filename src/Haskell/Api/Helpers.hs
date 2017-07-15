@@ -25,9 +25,13 @@ import           Data.Monoid                ((<>))
 import           Data.String.Conversions    (cs)
 import           Data.Text                  (Text)
 import           Haskell.Api.Helpers.Shared
+{-
 import           JavaScript.Ajax            (AjaxResponse (..), StdMethod (..),
                                              sendRequest)
+-}
 import           Network.HTTP.Types         (Status (..))
+import JavaScript.Web.XMLHttpRequest
+import Debug.Trace
 
 
 
@@ -52,6 +56,7 @@ _eitherDecode bs =
 handleError :: (FromJSON a, FromJSON b, Default b) => RawApiResult -> Either (ApiError b) a
 handleError (Left (status, body)) = Left $ ServerError status (_eitherDecode body)
 handleError (Right bs)    =
+  let _ = trace "handleError" () in
   case eitherDecode (cs bs) of
     Left err -> Left $ DecodeError $ cs err
     Right a  -> Right a
@@ -64,8 +69,16 @@ internalAction
   -> Text           -- ^ url
   -> Maybe body     -- ^ optional request body to encode
   -> m RawApiResult -- ^ result
-internalAction method url m_body =
-  liftIO (sendRequest method url (fmap (cs . encode) m_body) (Just "application/json") >>= properResponse)
+internalAction method url m_body = do
+
+
+  liftIO $ print ["internalAction", show method, show url]
+
+  v <- liftIO (sendRequest method url (fmap (cs . encode) m_body) (Just "application/json") >>= properResponse)
+
+  liftIO $ print $ show v
+
+  pure v
 
 
 
@@ -81,10 +94,20 @@ properResponse AjaxResponse{..} =
 getAt :: (QueryParam qp)  => [qp] -> [Text] -> ApiEff SpecificApiOptions RawApiResult
 getAt params' paths = do
 
+  liftIO $ print ("getAt 1" :: String)
+
   url <- urlFromReader
 
+  liftIO $ print ("getAt 2" :: String)
+
   let url' = routeQueryBy url paths params'
+
+  liftIO $ print ("getAt 3" :: String)
+
   runDebug (apiLog ("getAt: " <> url'))
+
+  liftIO $ print ("getAt 4" :: String)
+
   internalAction GET url' (Nothing :: Maybe ())
 
 

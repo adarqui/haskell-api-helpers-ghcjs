@@ -20,7 +20,7 @@ library
                      , aeson
                      , bytestring
                      , data-default
-                     , ghcjs-ajax == 0.2.0.0
+--                     , ghcjs-ajax == 0.2.0.0
                      , http-types
                      , mtl
                      , string-conversions

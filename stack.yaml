@@ -2,6 +2,6 @@ flags: {}
 packages:
 - .
 - ../haskell-api-helpers-shared
-- ../ghcjs-ajax/ghcjs-ajax
+#- ../ghcjs-ajax/ghcjs-ajax
 extra-deps: []
 resolver: lts-8.5
