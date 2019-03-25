@@ -16,22 +16,20 @@ module Haskell.Api.Helpers (
 
 
 
-import           Control.Monad.IO.Class     (MonadIO, liftIO)
-import           Data.Aeson                 (FromJSON, ToJSON, eitherDecode,
-                                             encode)
-import           Data.ByteString.Lazy.Char8 (ByteString)
-import           Data.Default               (Default, def)
-import           Data.Monoid                ((<>))
-import           Data.String.Conversions    (cs)
-import           Data.Text                  (Text)
+import           Control.Monad.IO.Class        (MonadIO, liftIO)
+import           Data.Aeson                    (FromJSON, ToJSON, eitherDecode,
+                                                encode)
+import           Data.ByteString.Lazy.Char8    (ByteString)
+import           Data.Default                  (Default, def)
+import           Data.Monoid                   ((<>))
+import           Data.String.Conversions       (cs)
+import           Data.Text                     (Text)
+import           Debug.Trace
 import           Haskell.Api.Helpers.Shared
-{-
-import           JavaScript.Ajax            (AjaxResponse (..), StdMethod (..),
-                                             sendRequest)
--}
-import           Network.HTTP.Types         (Status (..))
-import JavaScript.Web.XMLHttpRequest
-import Debug.Trace
+
+import           Data.JSString.Text
+import           JavaScript.Web.XMLHttpRequest
+import           Network.HTTP.Types            (Status (..))
 
 
 
@@ -65,16 +63,27 @@ handleError (Right bs)    =
 
 internalAction
   :: (MonadIO m, ToJSON body)
-  => StdMethod      -- ^ method
+  => Method         -- ^ method
   -> Text           -- ^ url
   -> Maybe body     -- ^ optional request body to encode
   -> m RawApiResult -- ^ result
 internalAction method url m_body = do
 
-
   liftIO $ print ["internalAction", show method, show url]
 
-  v <- liftIO (sendRequest method url (fmap (cs . encode) m_body) (Just "application/json") >>= properResponse)
+  -- v <- liftIO (sendRequest method url (fmap (cs . encode) m_body) (Just "application/json") >>= properResponse)
+  let req = Request{
+    reqMethod = method,
+    reqURI = textToJSString url,
+    reqData = case m_body of
+                             Just body -> StringData (textToJSString $ cs $ encode $ body)
+                             Nothing   -> NoData,
+    reqHeaders = [("Content-Type", "application/json")],
+    reqLogin = Nothing,
+    reqWithCredentials = False
+  }
+
+  v <- liftIO (xhrText req) >>= properResponse
 
   liftIO $ print $ show v
 
@@ -82,12 +91,12 @@ internalAction method url m_body = do
 
 
 
--- properResponse :: (Monad m, FromJSON body) => AjaxResponse -> m RawApiResult
-properResponse :: (Monad m) => AjaxResponse -> m RawApiResult
-properResponse AjaxResponse{..} =
-  case ar_status of
-    (Status 200 _) -> pure $ Right $ cs ar_body
-    _              -> pure $ Left (ar_status, cs ar_body)
+properResponse :: (Monad m) => Response Text -> m RawApiResult
+properResponse Response{..} =
+   case status of
+     200 -> pure $ Right $ maybe "" cs contents
+     _   -> pure $ Left (Status {statusCode=status, statusMessage=""}, maybe "" cs contents)
+-- properResponse _ = pure $ Left (Status {statusCode=0, statusMessage=""}, "")
 
 
 

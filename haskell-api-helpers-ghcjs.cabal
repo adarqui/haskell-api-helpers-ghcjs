@@ -17,6 +17,7 @@ library
   hs-source-dirs:      src
   exposed-modules:     Haskell.Api.Helpers
   build-depends:       base
+                     , ghcjs-base
                      , aeson
                      , bytestring
                      , data-default
