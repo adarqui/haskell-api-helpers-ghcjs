@@ -16,14 +16,15 @@ module Haskell.Api.Helpers (
 
 
 
-import           Control.Monad.IO.Class        (MonadIO, liftIO)
-import           Data.Aeson                    (FromJSON, ToJSON, eitherDecode,
-                                                encode)
-import           Data.ByteString.Lazy.Char8    (ByteString)
-import           Data.Default                  (Default, def)
-import           Data.Monoid                   ((<>))
-import           Data.String.Conversions       (cs)
-import           Data.Text                     (Text)
+import           Control.Monad.IO.Class     (MonadIO, liftIO)
+import           Data.Aeson                 (FromJSON, ToJSON, eitherDecode,
+                                             encode)
+import           Data.ByteString.Lazy.Char8 (ByteString)
+import           Data.Default               (Default, def)
+import           Data.Monoid                ((<>))
+import           Data.String.Conversions    (cs)
+import           Data.Text                  (Text)
+import qualified Data.Text.IO               as Text
 import           Debug.Trace
 import           Haskell.Api.Helpers.Shared
 
@@ -71,7 +72,6 @@ internalAction method url m_body = do
 
   liftIO $ print ["internalAction", show method, show url]
 
-  -- v <- liftIO (sendRequest method url (fmap (cs . encode) m_body) (Just "application/json") >>= properResponse)
   let req = Request{
     reqMethod = method,
     reqURI = textToJSString url,
@@ -85,7 +85,10 @@ internalAction method url m_body = do
 
   v <- liftIO (xhrText req) >>= properResponse
 
-  liftIO $ print $ show v
+  let resp = case v of
+               Left (_, err) -> cs err
+               Right result       -> cs result
+  liftIO $ Text.putStrLn $ (("METHOD="::Text)<>(cs $ show method)) <> (", URL="<>url) <> (", M_BODY="<>resp)
 
   pure v
 
@@ -96,7 +99,6 @@ properResponse Response{..} =
    case status of
      200 -> pure $ Right $ maybe "" cs contents
      _   -> pure $ Left (Status {statusCode=status, statusMessage=""}, maybe "" cs contents)
--- properResponse _ = pure $ Left (Status {statusCode=0, statusMessage=""}, "")
 
 
 
